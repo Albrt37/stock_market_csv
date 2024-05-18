@@ -47,3 +47,12 @@ with open('tickers.txt', 'r') as file:
             info.get('returnOnAssets', 'N/A'),
             info.get('returnOnEquity', 'N/A')
             ])
+
+            # Remove empty rows from the output file
+            with open(file_name, 'r+') as file:
+                lines = file.readlines()
+                file.seek(0)
+                for line in lines:
+                    if line.strip():
+                        file.write(line)
+                file.truncate()
