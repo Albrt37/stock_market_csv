@@ -1,58 +1,65 @@
 #!/usr/bin/env python
-import csv
 import yfinance as yf
-import datetime
+import json
+import time
 
-# Import the list of tickers
-with open('tickers.txt', 'r') as file:
-    for line in file:
-        # Get the ticker symbol
-        ticker = line.strip()
+# Filenames
+json_filename = 'stock_data.json'
+tickers_filename = 'tickers.txt'
+processed_filename = 'processed_ticker.txt'
+
+def load_json_data(filename):
+    """Load existing JSON data or return an empty dictionary if the file doesn't exist or is invalid."""
+    try:
+        with open(filename, 'r') as jf:
+            return json.load(jf)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_json_data(filename, data):
+    """Save the data dictionary to a JSON file."""
+    with open(filename, 'w') as jf:
+        json.dump(data, jf, indent=4)
+
+# Load any previously processed stock data from JSON
+stock_data = load_json_data(json_filename)
+
+# Read the list of tickers from tickers.txt
+with open(tickers_filename, 'r') as file:
+    tickers = [line.strip() for line in file if line.strip()]
+
+# Process each ticker one by one
+for ticker in tickers:
+    try:
+        print(f"Processing ticker: {ticker}")
+        stock = yf.Ticker(ticker)
+        info = stock.info  # This is the API call that might trigger rate limiting
         
-        # Get the ticker data
-        data = yf.Ticker(ticker)
+        # Update the stock_data dictionary with the new information
+        stock_data[ticker] = info
         
-        # Get the ticker info
-        info = data.info
+        # Save the updated data to the JSON file immediately
+        save_json_data(json_filename, stock_data)
         
-        # Get the current date
-        current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        # Log the processed ticker so you have a record of which ones are done
+        with open(processed_filename, 'a') as processed_file:
+            processed_file.write(f"{ticker}\n")
+        
+        # Remove the processed ticker from tickers.txt
+        # Read in the current tickers, filter out the processed ticker, and overwrite the file.
+        with open(tickers_filename, 'r') as tf:
+            lines = tf.readlines()
+        with open(tickers_filename, 'w') as tf:
+            for line in lines:
+                if line.strip() != ticker:
+                    tf.write(line)
+                    
+    except Exception as e:
+        # If an error occurs (like a rate limit error), print the error,
+        # optionally wait before retrying, and then break out of the loop.
+        print(f"Error processing {ticker}: {e}")
+        # Optional: Wait a minute before exiting if you expect a temporary rate-limit.
+        time.sleep(60)
+        break
 
-        # Create the file name with current date
-        file_name = f'stock_info_{current_date}.csv'
-
-        # Print the ticker info into the new CSV file
-        with open(file_name, 'a') as file:
-            writer = csv.writer(file)
-            
-            # Add header row if file is empty
-            if file.tell() == 0:
-                writer.writerow(['Name', 'Symbol', 'Sector', 'Industry', 'Market Cap', 'Current Price', 'Volume', 'Investor Website', 'Enterprise Value', 'Trailing EPS', 'Forward EPS', 'Dividend Yield', 'Price to Book', 'Enterprise to EBITDA', 'Return on Assets', 'Return on Equity'])
-            
-            writer.writerow([
-            info.get('shortName', 'N/A'),
-            info.get('symbol', 'N/A'),
-            info.get('sector', 'N/A'),
-            info.get('industry', 'N/A'),
-            info.get('marketCap', 'N/A'),
-            info.get('currentPrice', 'N/A'),
-            info.get('regularMarketVolume', 'N/A'),
-            info.get('website', 'N/A'),
-            info.get('enterpriseValue', 'N/A'),
-            info.get('trailingEps', 'N/A'),
-            info.get('forwardEps', 'N/A'),
-            info.get('dividendYield', 'N/A'),
-            info.get('priceToBook', 'N/A'),
-            info.get('enterpriseToEbitda', 'N/A'),
-            info.get('returnOnAssets', 'N/A'),
-            info.get('returnOnEquity', 'N/A')
-            ])
-
-            # Remove empty rows from the output file
-            with open(file_name, 'r+') as file:
-                lines = file.readlines()
-                file.seek(0)
-                for line in lines:
-                    if line.strip():
-                        file.write(line)
-                file.truncate()
+print("Processing complete or interrupted by an error.")
